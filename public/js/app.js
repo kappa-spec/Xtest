@@ -34,18 +34,42 @@ async function initApp() {
 
         _supabase = supabase.createClient(config.supabaseUrl, config.supabaseKey);
 
-        // ログイン・登録をスキップし、ゲストまたは既存ユーザーとして表示
-        // meがnullの状態でもアプリ構造を維持するため、仮の情報をセット
-        me = { id: "guest", handle: "guest", name: "ゲストユーザー", bio: "閲覧モード" };
+        // --- 端末固有プロフィールの取得・作成ロジック ---
+        let localId = localStorage.getItem('x_clone_user_id');
         
-        const { data: { user } } = await _supabase.auth.getUser();
-        if (user) {
-            const { data: profile } = await _supabase.from('profiles').select('*').eq('id', user.id).single();
-            if (profile) {
-                me = { ...profile, name: profile.display_name };
+        if (!localId) {
+            // 初回訪問：IDを生成して保存 (UUID v4形式)
+            localId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+            localStorage.setItem('x_clone_user_id', localId);
+            
+            // 初期プロフィールの作成
+            const initialHandle = "user_" + Math.random().toString(36).substring(2, 7);
+            const { data, error } = await _supabase.from('profiles').insert([{
+                id: localId,
+                handle: initialHandle,
+                display_name: "新しいユーザー",
+                bio: "よろしくお願いします。",
+                following: [],
+                followers: []
+            }]).select().single();
+            
+            if (error) throw error;
+            me = { ...data, name: data.display_name };
+        } else {
+            // リピート訪問：DBからプロフィール取得
+            const { data, error } = await _supabase.from('profiles').select('*').eq('id', localId).single();
+            
+            if (error || !data) {
+                localStorage.removeItem('x_clone_user_id');
+                return initApp();
             }
+            me = { ...data, name: data.display_name };
         }
-        
+        // --------------------------------------------
+
         showApp();
     } catch (e) {
         console.error(e);
@@ -138,7 +162,7 @@ function showApp() {
 }
 
 async function logout() {
-    await _supabase.auth.signOut();
+    // 認証廃止に伴い、リロードして初期化する挙動に変更
     location.reload();
 }
 
