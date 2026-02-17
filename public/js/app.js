@@ -34,39 +34,28 @@ async function initApp() {
 
         _supabase = supabase.createClient(config.supabaseUrl, config.supabaseKey);
 
-        // --- 端末固有プロフィールの取得・作成ロジック ---
+        // --- 端末固有プロフィールの取得・作成ロジック (堅牢版) ---
         let localId = localStorage.getItem('x_clone_user_id');
         
-        if (!localId) {
-            // 初回訪問：IDを生成して保存 (UUID v4形式)
+        if (localId) {
+            // IDがある場合、まずはDBから探す
+            const { data, error } = await _supabase.from('profiles').select('*').eq('id', localId).maybeSingle();
+            
+            if (data) {
+                // プロフィールが見つかった
+                me = { ...data, name: data.display_name };
+            } else {
+                // IDはあるがDBにない場合、IDを再利用して作成へ
+                me = await createInitialProfile(localId);
+            }
+        } else {
+            // IDがない完全な新規ユーザー
             localId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
                 var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
                 return v.toString(16);
             });
             localStorage.setItem('x_clone_user_id', localId);
-            
-            // 初期プロフィールの作成
-            const initialHandle = "user_" + Math.random().toString(36).substring(2, 7);
-            const { data, error } = await _supabase.from('profiles').insert([{
-                id: localId,
-                handle: initialHandle,
-                display_name: "新しいユーザー",
-                bio: "よろしくお願いします。",
-                following: [],
-                followers: []
-            }]).select().single();
-            
-            if (error) throw error;
-            me = { ...data, name: data.display_name };
-        } else {
-            // リピート訪問：DBからプロフィール取得
-            const { data, error } = await _supabase.from('profiles').select('*').eq('id', localId).single();
-            
-            if (error || !data) {
-                localStorage.removeItem('x_clone_user_id');
-                return initApp();
-            }
-            me = { ...data, name: data.display_name };
+            me = await createInitialProfile(localId);
         }
         // --------------------------------------------
 
@@ -78,7 +67,28 @@ async function initApp() {
 }
 
 /**
- * 認証画面切り替え
+ * 初回プロフィール作成用のヘルパー
+ */
+async function createInitialProfile(id) {
+    const initialHandle = "user_" + Math.random().toString(36).substring(2, 7);
+    const { data, error } = await _supabase.from('profiles').insert([{
+        id: id,
+        handle: initialHandle,
+        display_name: "新しいユーザー",
+        bio: "よろしくお願いします。",
+        following: [],
+        followers: []
+    }]).select().single();
+
+    if (error) {
+        console.error("プロフィール作成エラー:", error);
+        throw error;
+    }
+    return { ...data, name: data.display_name };
+}
+
+/**
+ * 認証画面切り替え (UI互換性のために残す)
  */
 function switchAuthMode(mode) {
     authMode = mode;
@@ -88,73 +98,29 @@ function switchAuthMode(mode) {
     const tabSignup = document.getElementById('tab-signup');
 
     if (mode === 'signup') {
-        nameField.classList.remove('hidden');
-        submitBtn.innerText = "新規登録";
-        tabSignup.className = "flex-1 py-2 font-bold active-tab text-center";
-        tabLogin.className = "flex-1 py-2 font-bold text-[#71767b] text-center";
+        if(nameField) nameField.classList.remove('hidden');
+        if(submitBtn) submitBtn.innerText = "新規登録";
+        if(tabSignup) tabSignup.className = "flex-1 py-2 font-bold active-tab text-center";
+        if(tabLogin) tabLogin.className = "flex-1 py-2 font-bold text-[#71767b] text-center";
     } else {
-        nameField.classList.add('hidden');
-        submitBtn.innerText = "ログイン";
-        tabLogin.className = "flex-1 py-2 font-bold active-tab text-center";
-        tabSignup.className = "flex-1 py-2 font-bold text-[#71767b] text-center";
+        if(nameField) nameField.classList.add('hidden');
+        if(submitBtn) submitBtn.innerText = "ログイン";
+        if(tabLogin) tabLogin.className = "flex-1 py-2 font-bold active-tab text-center";
+        if(tabSignup) tabSignup.className = "flex-1 py-2 font-bold text-[#71767b] text-center";
     }
 }
 
 /**
- * 認証実行 (登録・ログイン)
+ * 認証実行 (ダミー関数として残す)
  */
 async function handleAuth() {
-    const handleInput = document.getElementById('auth-handle').value.toLowerCase().replace('@', '').trim();
-    const pass = document.getElementById('auth-pass').value.trim();
-    const name = document.getElementById('auth-name').value.trim();
-
-    if (!handleInput || !pass) return showError("入力が不足しています");
-
-    // バリデーションエラー回避のため実在しやすいドメインを使用
-    const dummyEmail = `${handleInput}@gmail.com`;
-
-    if (authMode === 'signup') {
-        if (!name) return showError("名前を入力してください");
-        
-        // 1. ユーザー作成
-        const { data, error: authError } = await _supabase.auth.signUp({
-            email: dummyEmail,
-            password: pass
-        });
-
-        if (authError) return alert("登録エラー: " + authError.message);
-
-        // 2. プロフィール作成 (SQLポリシー "Anyone can insert profiles" により実行可能)
-        const { error: profError } = await _supabase.from('profiles').insert([{
-            id: data.user.id,
-            handle: handleInput,
-            display_name: name,
-            bio: "よろしくお願いします。",
-            following: [], 
-            followers: [] 
-        }]);
-
-        if (profError) {
-            console.error(profError);
-            return alert("プロフィールの作成に失敗しました: " + profError.message);
-        }
-
-        alert("登録が完了しました！");
-        location.reload();
-    } else {
-        // ログイン
-        const { error: loginError } = await _supabase.auth.signInWithPassword({
-            email: dummyEmail,
-            password: pass
-        });
-
-        if (loginError) return showError("ユーザー名またはパスワードが違います");
-        location.reload();
-    }
+    showError("このバージョンでは認証は不要です。");
 }
 
 function showApp() {
-    document.getElementById('auth-screen').classList.add('hidden');
+    const authScreen = document.getElementById('auth-screen');
+    if (authScreen) authScreen.classList.add('hidden');
+    
     document.getElementById('sidebar').classList.remove('hidden');
     document.getElementById('main-content').classList.remove('hidden');
     document.getElementById('side-name').innerText = me.name;
@@ -162,7 +128,6 @@ function showApp() {
 }
 
 async function logout() {
-    // 認証廃止に伴い、リロードして初期化する挙動に変更
     location.reload();
 }
 
@@ -211,7 +176,7 @@ async function submitPost() {
 }
 
 /**
- * ポスト削除 (新規追加)
+ * ポスト削除
  */
 async function deletePost(postId) {
     if (!confirm("ポストを削除しますか？")) return;
@@ -228,6 +193,7 @@ async function deletePost(postId) {
  */
 async function toggleLike(id) {
     const p = posts.find(x => x.id === id);
+    if (!p) return;
     const likes = p.likes || [];
     const newLikes = likes.includes(me.handle) ? likes.filter(h => h !== me.handle) : [...likes, me.handle];
     await _supabase.from('posts').update({ likes: newLikes }).eq('id', id);
@@ -236,6 +202,7 @@ async function toggleLike(id) {
 
 async function toggleRepost(id) {
     const p = posts.find(x => x.id === id);
+    if (!p) return;
     const reps = p.reposts || [];
     const newReps = reps.includes(me.handle) ? reps.filter(h => h !== me.handle) : [...reps, me.handle];
     await _supabase.from('posts').update({ reposts: newReps }).eq('id', id);
@@ -256,7 +223,7 @@ async function submitReply(postId) {
 }
 
 /**
- * フォロー機能 (undefined対策)
+ * フォロー機能
  */
 async function toggleFollow(targetHandle) {
     const target = users[targetHandle];
@@ -302,7 +269,8 @@ function nav(v, handle = "me") {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
-    document.getElementById('view-' + v).classList.remove('hidden');
+    const targetView = document.getElementById('view-' + v);
+    if (targetView) targetView.classList.remove('hidden');
     
     if (v === 'profile') { 
         currentViewUser = (handle === "me") ? me.handle : handle; 
@@ -317,7 +285,7 @@ function nav(v, handle = "me") {
 }
 
 /**
- * HTML生成 (削除ボタンを追加)
+ * HTML生成
  */
 function createPostHTML(p) {
     const isLiked = (p.likes || []).includes(me.handle);
@@ -368,23 +336,29 @@ function createPostHTML(p) {
 }
 
 function refreshCurrentView() {
-    if (!document.getElementById('view-home').classList.contains('hidden')) renderHome();
-    if (!document.getElementById('view-profile').classList.contains('hidden')) renderProfile();
-    if (!document.getElementById('view-explore').classList.contains('hidden')) renderSearch();
+    const home = document.getElementById('view-home');
+    const profile = document.getElementById('view-profile');
+    const explore = document.getElementById('view-explore');
+    if (home && !home.classList.contains('hidden')) renderHome();
+    if (profile && !profile.classList.contains('hidden')) renderProfile();
+    if (explore && !explore.classList.contains('hidden')) renderSearch();
 }
 
 function renderHome() { 
-    document.getElementById('home-timeline').innerHTML = posts.map(createPostHTML).join(''); 
+    const el = document.getElementById('home-timeline');
+    if(el) el.innerHTML = posts.map(createPostHTML).join(''); 
 }
 
 function renderSearch() {
-    const q = document.getElementById('search-input').value.toLowerCase();
+    const input = document.getElementById('search-input');
+    const q = input ? input.value.toLowerCase() : "";
     const results = q ? posts.filter(p => p.content.toLowerCase().includes(q) || p.handle.includes(q)) : posts;
-    document.getElementById('search-results').innerHTML = results.map(createPostHTML).join('');
+    const el = document.getElementById('search-results');
+    if(el) el.innerHTML = results.map(createPostHTML).join('');
 }
 
 function renderProfile() {
-    const u = users[currentViewUser];
+    const u = users[currentViewUser] || (currentViewUser === me.handle ? me : null);
     if (!u) return;
 
     document.getElementById('prof-header-name').innerText = u.name;
@@ -406,12 +380,14 @@ function renderProfile() {
     }
 
     const filtered = currentTab === 'posts' ? myPosts : posts.filter(p => (p.likes || []).includes(u.handle));
-    document.getElementById('profile-timeline').innerHTML = filtered.map(createPostHTML).join('');
+    const el = document.getElementById('profile-timeline');
+    if(el) el.innerHTML = filtered.map(createPostHTML).join('');
 }
 
 function renderSuggestions() {
     const list = Object.values(users).filter(u => u.handle !== me.handle).slice(0, 3);
-    document.getElementById('suggestion-list').innerHTML = list.map(u => `
+    const el = document.getElementById('suggestion-list');
+    if(el) el.innerHTML = list.map(u => `
         <div class="flex items-center justify-between py-3 cursor-pointer" onclick="nav('profile', '${u.handle}')">
             <div class="flex gap-2">
                 <div class="w-10 h-10 rounded-full bg-gray-700"></div>
@@ -437,6 +413,7 @@ function setTab(t) {
 
 function toggleEditModal() {
     const modal = document.getElementById('edit-modal');
+    if(!modal) return;
     modal.classList.toggle('hidden');
     document.getElementById('edit-name').value = me.name;
     document.getElementById('edit-bio').value = me.bio || "";
@@ -449,7 +426,8 @@ function toggleReply(id) {
 
 function togglePostBtn(btnId, inputId) {
     const el = document.getElementById(btnId);
-    if (el) el.disabled = (document.getElementById(inputId).value.trim() === "");
+    const input = document.getElementById(inputId);
+    if (el && input) el.disabled = (input.value.trim() === "");
 }
 
 initApp();
