@@ -308,7 +308,7 @@ function createPostHTML(p) {
                     <div class="flex-1">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-1 font-bold" onclick="event.stopPropagation(); nav('profile', '${p.handle}')">
-                                ${p.name} <span class="font-normal text-[#71767b]">@${p.handle}</span>
+                                ${p.name} <span class="font-normal text-[#71767b]">@${r.handle || p.handle}</span>
                             </div>
                             ${isMyPost ? `
                                 <button onclick="event.stopPropagation(); deletePost(${p.id})" class="text-[#71767b] hover:text-red-500 p-1">
@@ -318,9 +318,9 @@ function createPostHTML(p) {
                         </div>
                         <p class="mt-1 text-[15px] leading-normal whitespace-pre-wrap">${p.content}</p>
                         <div class="flex justify-between mt-3 text-[#71767b] max-w-[425px]">
-                            <span class="flex items-center gap-2 hover:text-blue-400">💬 ${repliesCount}</span>
-                            <span onclick="event.stopPropagation(); toggleRepost(${p.id})" class="flex items-center gap-2 hover:text-green-500 ${isReposted ? 'text-green-500' : ''}">🔄 ${p.reposts.length}</span>
-                            <span onclick="event.stopPropagation(); toggleLike(${p.id})" class="flex items-center gap-2 hover:text-pink-500 ${isLiked ? 'text-pink-500' : ''}">${isLiked ? '❤️' : '🖤'} ${p.likes.length}</span>
+                            <span class="flex items-center gap-1 hover:text-blue-400" onclick="event.stopPropagation(); toggleReply(${p.id})"><svg viewBox="0 0 24 24" class="icon-sm"><path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10zm0-18c4.4 0 8 3.6 8 8s-3.6 8-8 8-8-3.6-8-8 3.6-8 8-8z"/></svg> ${repliesCount}</span>
+                            <span onclick="event.stopPropagation(); toggleRepost(${p.id})" class="flex items-center gap-1 hover:text-green-500 ${isReposted ? 'text-green-500' : ''}"><svg viewBox="0 0 24 24" class="icon-sm"><path d="M4.5 3.5v13h13v-13H4.5z M16 15H6V5h10V15z"/></svg> ${p.reposts.length}</span>
+                            <span onclick="event.stopPropagation(); toggleLike(${p.id})" class="flex items-center gap-1 hover:text-pink-500 ${isLiked ? 'text-pink-500' : ''}"><svg viewBox="0 0 24 24" class="icon-sm" style="fill:${isLiked ? '#f91880' : 'currentColor'}"><path d="M12 21.6l-1.5-1.4C5.4 15.6 2 12.4 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1C13.1 3.8 14.8 3 16.5 3 19.6 3 22 5.4 22 8.5c0 3.9-3.4 7.2-8.5 11.7L12 21.6z"/></svg> ${p.likes.length}</span>
                         </div>
                     </div>
                 </div>
