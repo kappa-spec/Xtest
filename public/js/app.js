@@ -308,7 +308,7 @@ function createPostHTML(p) {
                     <div class="flex-1">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-1 font-bold" onclick="event.stopPropagation(); nav('profile', '${p.handle}')">
-                                ${p.name} <span class="font-normal text-[#71767b]">@${r.handle || p.handle}</span>
+                                ${p.name} <span class="font-normal text-[#71767b]">@${p.handle}</span>
                             </div>
                             ${isMyPost ? `
                                 <button onclick="event.stopPropagation(); deletePost(${p.id})" class="text-[#71767b] hover:text-red-500 p-1">
@@ -431,3 +431,4 @@ function togglePostBtn(btnId, inputId) {
 }
 
 initApp();
+
