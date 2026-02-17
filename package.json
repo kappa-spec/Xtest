@@ -1,0 +1,12 @@
+{
+  "name": "x-clone",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.x.x",
+    "express": "^4.x.x"
+  }
+}
